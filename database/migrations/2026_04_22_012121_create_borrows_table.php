@@ -13,15 +13,18 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->foreignId('book_id')->constrained()->onDelete('cascade');
             
-            $table->date('borrow_date'); // Tanggal pengajuan pinjam
-            $table->date('due_date');    // Batas waktu pengembalian (sebelumnya return_date)
-            $table->string('guarantee'); // Jaminan
+            $table->date('borrow_date'); 
+            $table->date('due_date');    
+            $table->string('guarantee'); 
             
-            // Status hanya untuk proses peminjaman awal
+            // PERBAIKAN: Tambahkan semua kemungkinan status di sini
             $table->enum('status', [
                 'menunggu_persetujuan', 
                 'dipinjam', 
-                'ditolak'
+                'ditolak',
+                'menunggu_pengembalian', // <-- Tambahkan ini
+                'dikembalikan',          // <-- Tambahkan ini
+                'terlambat'              // <-- Tambahkan ini
             ])->default('menunggu_persetujuan');
             
             $table->text('reject_reason')->nullable(); 

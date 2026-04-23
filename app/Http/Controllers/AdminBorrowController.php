@@ -10,9 +10,9 @@ class AdminBorrowController extends Controller
 {
     public function index(Request $request)
     {
-        // HANYA TAMPILKAN PEMINJAMAN YANG BELUM SELESAI (AKTIF)
+        // PERBAIKAN: Tambahkan 'menunggu_pengembalian' agar buku yang sedang diproses kembali tetap tampil di admin
         $query = Borrow::with(['user', 'book', 'bookReturn'])
-            ->whereIn('status', ['menunggu_persetujuan', 'dipinjam'])
+            ->whereIn('status', ['menunggu_persetujuan', 'dipinjam', 'menunggu_pengembalian'])
             ->latest();
 
         // SEARCH: Cari berdasarkan nama user, email, atau judul buku
@@ -40,25 +40,30 @@ class AdminBorrowController extends Controller
     // METHOD BARU: Halaman Riwayat Pengembalian Buku (dari tabel book_returns)
     public function history(Request $request)
     {
-        // TAMPILKAN SEMUA PENGEMBALIAN BUKU YANG SUDAH SELESAI
-        $query = BookReturn::with(['borrow.user', 'borrow.book'])
-            ->where('status', 'dikembalikan')
+        // PERBAIKAN: Gunakan model 'Borrow' agar status 'ditolak' juga bisa masuk ke riwayat
+        $query = Borrow::with(['user', 'book', 'bookReturn'])
+            ->whereIn('status', ['dikembalikan', 'terlambat', 'ditolak'])
             ->latest();
 
         // SEARCH: Cari berdasarkan nama user, email, atau judul buku
         if ($request->has('search') && $request->search != '') {
             $search = $request->search;
-            $query->whereHas('borrow.user', function($q) use ($search) {
+            $query->whereHas('user', function($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%");
             })
-            ->orWhereHas('borrow.book', function($q) use ($search) {
+            ->orWhereHas('book', function($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%");
             });
         }
 
         if ($request->has('status') && $request->status != '') {
-            $query->where('status', $request->status);
+            if ($request->status == 'dikembalikan') {
+                // Tampilkan yang tepat waktu maupun terlambat sebagai kategori 'Selesai'
+                $query->whereIn('status', ['dikembalikan', 'terlambat']);
+            } else {
+                $query->where('status', $request->status);
+            }
         }
 
         // PER PAGE: Default 10, bisa diubah ke 5, 25, atau 50
@@ -106,11 +111,11 @@ class AdminBorrowController extends Controller
         return back()->withErrors(['error' => 'Aksi tidak valid.']);
     }
 
-    // PENERIMAAN BUKU: Update status di tabel book_returns
+    // PENERIMAAN BUKU: Update status di tabel book_returns dan borrows
     public function returnBook(Request $request, Borrow $transaksi)
     {
-        // Cek apakah borrow ada di status dipinjam
-        if ($transaksi->status != 'dipinjam') {
+        // PERBAIKAN: Terima status dipinjam (kembali langsung) ATAU menunggu_pengembalian (lewat klik user)
+        if (!in_array($transaksi->status, ['dipinjam', 'menunggu_pengembalian'])) {
             return back()->withErrors(['error' => 'Status peminjaman tidak sesuai.']);
         }
 
@@ -129,20 +134,25 @@ class AdminBorrowController extends Controller
         $denda = $request->fine ?? 0;
         
         // Tentukan status: apakah terlambat atau tidak
-        $status = $actualReturnDate <= $transaksi->due_date ? 'dikembalikan' : 'terlambat';
+        $statusAkhir = $actualReturnDate <= $transaksi->due_date ? 'dikembalikan' : 'terlambat';
 
-        // Update record pengembalian
+        // 1. Update record di tabel book_returns
         $bookReturn->update([
             'actual_return_date' => $actualReturnDate,
-            'status' => $status,
+            'status' => $statusAkhir,
             'fine' => $denda,
+        ]);
+
+        // 2. PERBAIKAN: Update juga status di tabel borrows!
+        $transaksi->update([
+            'status' => $statusAkhir
         ]);
         
         // Kembalikan stock buku
         $transaksi->book->increment('stock');
         
         $pesan = 'Buku berhasil diterima.';
-        if ($status == 'terlambat') {
+        if ($statusAkhir == 'terlambat') {
             $pesan .= ' Pengembalian TERLAMBAT.';
         }
         if ($denda > 0) {

@@ -63,7 +63,7 @@
                 <!-- Filter Status -->
                 <select name="status" onchange="this.form.submit()" class="appearance-none block w-full sm:w-40 pl-4 pr-10 py-3 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 focus:ring-primary focus:border-primary bg-gray-50 cursor-pointer">
                     <option value="">Semua Status</option>
-                    <option value="dikembalikan" {{ request('status') == 'dikembalikan' ? 'selected' : '' }}>Dikembalikan</option>
+                    <option value="dikembalikan" {{ request('status') == 'dikembalikan' ? 'selected' : '' }}>Selesai / Dikembalikan</option>
                     <option value="ditolak" {{ request('status') == 'ditolak' ? 'selected' : '' }}>Ditolak</option>
                 </select>
             </form>
@@ -100,11 +100,11 @@
                     </td>
 
                     <td class="px-6 py-5 text-center">
-                        <div class="text-sm font-medium text-gray-600">{{ $borrow->borrow_date->format('d M') }} - {{ $borrow->return_date->format('d M Y') }}</div>
+                        <div class="text-sm font-medium text-gray-600">{{ $borrow->borrow_date->format('d M') }} - {{ $borrow->due_date->format('d M Y') }}</div>
                     </td>
 
                     <td class="px-6 py-5 text-center">
-                        @if($borrow->status == 'dikembalikan')
+                        @if(in_array($borrow->status, ['dikembalikan', 'terlambat']))
                             <span class="inline-flex bg-emerald-100 text-emerald-600 px-3 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider">Selesai</span>
                         @elseif($borrow->status == 'ditolak')
                             <span class="inline-flex bg-red-100 text-red-600 px-3 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider">Ditolak</span>
@@ -112,14 +112,14 @@
                     </td>
 
                     <td class="px-6 py-5 text-right">
-                        @if($borrow->status == 'dikembalikan')
-                            @if($borrow->fine > 0)
-                                <span class="text-red-500 text-xs font-bold bg-red-50 px-3 py-2 rounded-md inline-block">Denda: Rp {{ number_format($borrow->fine, 0, ',', '.') }}</span>
+                        @if(in_array($borrow->status, ['dikembalikan', 'terlambat']))
+                            @if(($borrow->bookReturn->fine ?? 0) > 0)
+                                <span class="text-red-500 text-xs font-bold bg-red-50 px-3 py-2 rounded-md inline-block">Denda: Rp {{ number_format($borrow->bookReturn->fine, 0, ',', '.') }}</span>
                             @else
                                 <span class="text-emerald-500 text-xs font-bold bg-emerald-50 px-3 py-2 rounded-md inline-block">Tanpa Denda</span>
                             @endif
                         @elseif($borrow->status == 'ditolak')
-                            <div class="max-w-xs">
+                            <div class="max-w-xs ml-auto">
                                 @if($borrow->reject_reason)
                                     <p class="text-red-600 text-xs font-medium italic">"{{ $borrow->reject_reason }}"</p>
                                 @else
